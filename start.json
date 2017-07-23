@@ -1,0 +1,10 @@
+{
+  "apps" : [
+      {
+    "name"        : "indicator",
+    "script"      : "./main.py",
+    "interpereter": "python",
+    "watch"       : true
+}
+  ]
+}
