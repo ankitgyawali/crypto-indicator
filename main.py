@@ -2,16 +2,23 @@
 import signal
 import gi
 import os
-
+from math import floor
 import json
 import urllib.request
 
+from PIL import Image, ImageDraw, ImageFont
 
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
-from gi.repository import Gtk, AppIndicator3, GObject
+from gi.repository import Gtk, AppIndicator3, GObject, Pango
 import time
 from threading import Thread
+
+# coins = ['ETH','BTC','REP','GNT','IOTA','TRST','ANT','FUN']
+coins = ['ETH','BTC','REP','GNT','BAT','ICN','RDD']
+base_value = 'USD'
+url = "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=" + ",".join(coins) + "&tsyms=" + base_value
+
 
 class Indicator():
     def __init__(self):
@@ -23,7 +30,7 @@ class Indicator():
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)       
         self.indicator.set_menu(self.create_menu())
         # Dev only
-        self.indicator.set_label("$"+get_prices()+"/ETH", self.app)
+        self.indicator.set_label("$"+get_init_price(get_prices())+"/ETH", self.app)
         # self.indicator.set_label("$"+get_prices()+"/ETH", self.app)
         # the thread:
         self.update = Thread(target=self.show_seconds)
@@ -36,31 +43,30 @@ class Indicator():
     def create_menu(self):
         menu = Gtk.Menu()
         # menu item 1
-        create_a_header("Coin",  "24hr +/- %", "Price", menu)
-        create_a_menu("ETH", "$101.2", "$2635.4", menu)
-        create_a_menu("SCJ", "$1210.2", "$263445.4", menu)
-        create_a_menu("SCJX", "$1210.2", "$263445.4", menu)
+        create_a_header("Coin",  "     24hr +/- %", "   Price ("+base_value+")", menu)
 
-        menu.append(Gtk.ImageMenuItem("Total Holdings: "))
-        menu_item = Gtk.ImageMenuItem.new_with_label("label")
+        make_menus(get_prices(),menu)
+
+        menu_item = Gtk.ImageMenuItem.new_with_label("Total Holdings: ")
         menu_item.set_always_show_image(True)
+        menu.append(Gtk.SeparatorMenuItem())          
         menu.append(menu_item)
-        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/SJCX.svg")))
+        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/USDT.svg")))
 
-        menu_item = Gtk.ImageMenuItem.new_with_label("label")
-        menu_item.set_always_show_image(True)
-        menu.append(menu_item)
-        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/BTC-alt.svg")))
-
-
-        # unmounted = Gtk.MenuItem('Unmounted Partitions')
-        # unmounted_submenu = Gtk.Menu()
-        # unmounted.set_submenu(unmounted_submenu)
-        # menu.append(unmounted)
+        # menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/BTC-alt.svg")))
+        # menu_item.set_image(Gtk.Image.new_from_file(img))
         
+        # Label Markup width
+        # row = Gtk.ImageMenuItem()
+        # menu.append(row)
+        # label = Gtk.Label('', xalign=0)
+        # label.modify_font(Pango.FontDescription('monospace 18'))
+        # label.set_markup("<span font_desc='unifont medium'>%s</span>" % 'ASTX')
+        
+        # label.set_max_width_chars(3)
+        # row.add(label)
+
         # IMAGE
-
-
         # menu.append(Gtk.MenuItem("ETHX --- $101.2 ---  $2635.4 --- 12 --- $265.4"))
         menu.append(Gtk.SeparatorMenuItem())  
 
@@ -78,7 +84,7 @@ class Indicator():
     def show_seconds(self):
         while True:
             time.sleep(60)
-            mention = "$"+get_prices()+"/ETH"
+            mention = "$"+get_init_price(get_prices())+"/ETH"
             # apply the interface update using  GObject.idle_add()
             GObject.idle_add(
                 self.indicator.set_label,
@@ -88,8 +94,40 @@ class Indicator():
 
     def stop(self, source):
         Gtk.main_quit()
-      
-    
+
+
+
+def process_coin_change(coin_change):
+    coin_change *= 10 ** (2 + 2)
+    return_val = '{1:.{0}f}%'.format(2, floor(coin_change) / 10 ** 2)
+    if (coin_change>0):
+        return "+ "  +return_val
+    else:
+        return return_val.replace("-", "- ")
+
+def process_coin_price(coin_price):
+    return (str(coin_price))
+    # if(coin_price>1):
+    #     lenx = (8 - int(len(str(coin_price).split("#")[0])))
+    #     lenx = (8)
+    #     # lenx = int(len(str(coin_price).split("#")[0])) - 8
+    #     price_format = "%." + str(lenx) +"f"
+    #     return str(price_format % coin_price)
+    # else:
+    #     return str("%.8f" % coin_price)
+
+def make_menus(prices,menu):
+    for key in prices['RAW']:
+        coin_symbol = str(prices['RAW'][key][base_value]['FROMSYMBOL'])
+        coin_price = process_coin_price(prices['DISPLAY'][key][base_value]['PRICE'])
+        coin_change = process_coin_change((prices['RAW'][key][base_value]['PRICE'] - prices['RAW'][key][base_value]['OPEN24HOUR'])/prices['RAW'][key][base_value]['PRICE'])
+        coin_change+= ' ' * (21 - len(coin_change))
+        menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price)
+        menu_item = Gtk.ImageMenuItem.new_with_label(menu_string)
+        menu_item.set_always_show_image(True)
+        menu.append(menu_item)
+        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".svg")))
+
 def create_a_menu(col1, col2, col3, menu):
     # col3+= "                     "
     col3+= ' ' * (21 - len(col3))
@@ -108,14 +146,15 @@ def column_normalizer(string):
     width = 25
     return (string + ' ' * (width - len(string)))
 
+def get_init_price(prices):
+    return str(prices['RAW']['ETH'][base_value]['PRICE'])
 
 def get_prices():
-    url = "https://api.coinmarketcap.com/v1/ticker/ethereum/?convert=USD"
     request = urllib.request.Request(url)
     response = urllib.request.urlopen(request)
-    eth = json.loads(response.read().decode('utf-8'))[0]['price_usd']
-    eth = str(eth)
-    return eth
+    dump = json.loads(response.read().decode('utf-8'))
+    eth = dump['RAW']['ETH'][base_value]['PRICE']
+    return dump
 
 Indicator()
 # this is where we call GObject.threads_init()
