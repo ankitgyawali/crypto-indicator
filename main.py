@@ -17,6 +17,8 @@ from threading import Thread
 # coins = ['ETH','BTC','REP','GNT','IOTA','TRST','ANT','FUN']
 coins = ['ETH','BTC','REP','GNT','BAT','ICN','RDD']
 base_value = 'USD'
+display_indicator = [['ETH', 'USD'], ['ETH','BTC']]
+
 url = "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=" + ",".join(coins) + "&tsyms=" + base_value
 
 
@@ -105,21 +107,10 @@ def process_coin_change(coin_change):
     else:
         return return_val.replace("-", "- ")
 
-def process_coin_price(coin_price):
-    return (str(coin_price))
-    # if(coin_price>1):
-    #     lenx = (8 - int(len(str(coin_price).split("#")[0])))
-    #     lenx = (8)
-    #     # lenx = int(len(str(coin_price).split("#")[0])) - 8
-    #     price_format = "%." + str(lenx) +"f"
-    #     return str(price_format % coin_price)
-    # else:
-    #     return str("%.8f" % coin_price)
-
 def make_menus(prices,menu):
     for key in prices['RAW']:
         coin_symbol = str(prices['RAW'][key][base_value]['FROMSYMBOL'])
-        coin_price = process_coin_price(prices['DISPLAY'][key][base_value]['PRICE'])
+        coin_price = prices['DISPLAY'][key][base_value]['PRICE']
         coin_change = process_coin_change((prices['RAW'][key][base_value]['PRICE'] - prices['RAW'][key][base_value]['OPEN24HOUR'])/prices['RAW'][key][base_value]['PRICE'])
         coin_change+= ' ' * (21 - len(coin_change))
         menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price)
