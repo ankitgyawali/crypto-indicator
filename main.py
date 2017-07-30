@@ -5,7 +5,7 @@ import os
 from math import floor
 import json
 import urllib.request
-
+import configparser
 from PIL import Image, ImageDraw, ImageFont
 
 gi.require_version('Gtk', '3.0')
@@ -14,13 +14,45 @@ from gi.repository import Gtk, AppIndicator3, GObject, Pango
 import time
 from threading import Thread
 
-# coins = ['ETH','BTC','REP','GNT','IOTA','TRST','ANT','FUN']
-coins = ['ETH','BTC','REP','GNT','BAT','ICN','RDD']
+
+config = configparser.ConfigParser()
+config.readfp(open(r'config.ini'))
+
+coins = json.loads(config.get('INDICATOR_OPTIONS', 'COINS_TO_SHOW'))
+
+primary_coins = json.loads(config.get('INDICATOR_OPTIONS', 'COINS_TO_SHOW'))
+base_coins = []
+base_coins.append(config.get('INDICATOR_OPTIONS', 'COINS_BASE_VALUE'))
+
+for pair in json.loads(config.get('INDICATOR_LABELS', 'PAIRS')):
+    primary_coins.append(pair[0])
+    base_coins.append(pair[1])
+
+
+for pair in config.items('HOLDINGS'):
+    primary_coins.append(pair[0].upper())
+
+
+coins_to_show = list(primary_coins)
+
+
+for pair in config.items('SILENT_HOLDINGS'):
+    primary_coins.append(pair[0].upper())
+
+def f7(seq):
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
+
+# primary_coins = f7(primary_coins)
+
+# secondary_coins = config.items('INDICATOR_LABELS')
+
+# coins = ['ETH','BTC','REP','GNT','BAT','ICN','CFI','SYS','LSK']
 base_value = 'USD'
 display_indicator = [['ETH', 'USD'], ['ETH','BTC']]
 
 url = "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=" + ",".join(coins) + "&tsyms=" + base_value
-
 
 class Indicator():
     def __init__(self):
@@ -49,13 +81,13 @@ class Indicator():
 
         make_menus(get_prices(),menu)
 
-        menu_item = Gtk.ImageMenuItem.new_with_label("Total Holdings: ")
-        menu_item.set_always_show_image(True)
+        menu_item = Gtk.MenuItem.new_with_label("Total Holdings: "+ str(primary_coins))
+        # menu_item.set_always_show_image(True)
         menu.append(Gtk.SeparatorMenuItem())          
         menu.append(menu_item)
-        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/USDT.svg")))
+        # menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/USDT.png")))
 
-        # menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/BTC-alt.svg")))
+        # menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/BTC-alt.png")))
         # menu_item.set_image(Gtk.Image.new_from_file(img))
         
         # Label Markup width
@@ -113,11 +145,11 @@ def make_menus(prices,menu):
         coin_price = prices['DISPLAY'][key][base_value]['PRICE']
         coin_change = process_coin_change((prices['RAW'][key][base_value]['PRICE'] - prices['RAW'][key][base_value]['OPEN24HOUR'])/prices['RAW'][key][base_value]['PRICE'])
         coin_change+= ' ' * (21 - len(coin_change))
-        menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price)
+        menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price) + "$100.00"
         menu_item = Gtk.ImageMenuItem.new_with_label(menu_string)
         menu_item.set_always_show_image(True)
         menu.append(menu_item)
-        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".svg")))
+        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".png")))
 
 def create_a_menu(col1, col2, col3, menu):
     # col3+= "                     "
@@ -128,7 +160,7 @@ def create_a_menu(col1, col2, col3, menu):
     menu.append(Gtk.SeparatorMenuItem())  
 
 def create_a_header(col1, col2, col3, menu):
-    menu_string = column_normalizer(col1) + column_normalizer(col2) + column_normalizer(col3)
+    menu_string = column_normalizer(col1) + column_normalizer(col2) + column_normalizer(col3) + column_normalizer("HOLDINGS")
     menu.append(Gtk.MenuItem(menu_string))
     # menu.append(Gtk.MenuItem("ETHX --- $101.2 ---  $2635.4 --- 12 --- $265.4"))
     menu.append(Gtk.SeparatorMenuItem())  
