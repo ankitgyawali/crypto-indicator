@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import signal
 import gi
-
+import webbrowser
 import os
 from math import floor
 import json
 import urllib.request
 import configparser
-
 gi.require_version('Gtk', '3.0')
 gi.require_version('AppIndicator3', '0.1')
 from gi.repository import Gtk, AppIndicator3, GObject, Pango
@@ -15,12 +14,14 @@ import time
 from threading import Thread
 import subprocess
 
+
 config = configparser.ConfigParser()
 config.readfp(open(r'config.ini'))
 
 coins = json.loads(config.get('INDICATOR_OPTIONS', 'COINS_TO_SHOW'))
 
-display_holdings = (config.get('INDICATOR_OPTIONS', 'DISPLAY_HOLDINGS') == '1')
+display_holdings = (config.get('INDICATOR_OPTIONS', 'DISPLAY_HOLDINGS_IN_MENU') == '1')
+display_holdings_label = (config.get('INDICATOR_LABELS', 'DISPLAY_TOTAL_HOLDINGS_IN_INDICATOR_LABEL') == '1')
 
 primary_coins = json.loads(config.get('INDICATOR_OPTIONS', 'COINS_TO_SHOW'))
 
@@ -33,7 +34,6 @@ holding_vals = []
 silent_holding_coins = []
 silent_holding_vals = []
 
-total_holdings = 0
 
 for main_pair in json.loads(config.get('INDICATOR_LABELS', 'PAIRS')):
     primary_coins.append(main_pair[0].upper())
@@ -60,136 +60,29 @@ def list_to_set_preserve_order(seq):
 primary_coins = list_to_set_preserve_order(primary_coins)
 base_coins = list_to_set_preserve_order(base_coins)
 coins_to_show = list_to_set_preserve_order(coins_to_show)
-
-# secondary_coins = config.items('INDICATOR_LABELS')
-
-# coins = ['ETH','BTC','REP','GNT','BAT','ICN','CFI','SYS','LSK']
-base_value = 'USD'
+base_value = config.get('INDICATOR_OPTIONS', 'COINS_BASE_VALUE').replace("\"","").replace("'","")
 display_indicator = [['ETH', 'USD'], ['ETH','BTC']]
 
-url = "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=" + ",".join(primary_coins) + "&tsyms=" +  ",".join(base_coins)
+url = "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=" + ",".join(primary_coins) + "&tsyms=" +  ",".join(base_coins) + "," + base_value
 
-def open_config():
-    # index = self.menu.get_children().index(self.menu.get_active())
-    # selection = self.menu_items2[index]
-    # subprocess.Popen(["xdg-open", os.path.abspath("config.ini")])
-    # os.system('xdg-open config.ini')
-    subprocess.call(['xdg-open', os.path.abspath("config.ini")])
+def get_prices():
+    return json.loads(urllib.request.urlopen(urllib.request.Request(url)).read().decode('utf-8'))
 
-class Indicator():
-    def __init__(self):
-        self.app = 'crypto-indicator'
-        iconpath = os.path.abspath("indicator-icon.svg")
-        self.indicator = AppIndicator3.Indicator.new(
-            self.app, iconpath,
-            AppIndicator3.IndicatorCategory.OTHER)
-        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-        self.sub_menus = self.create_menu()
-        self.indicator.set_menu(self.sub_menus)
-        # Dev only
-        self.indicator.set_label("$"+get_init_price(get_prices())+"/ETH", self.app)
-        # self.indicator.set_label("$"+get_prices()+"/ETH", self.app)
-        # the thread:
-        self.update = Thread(target=self.update_indicator)
-        # daemonize the thread to make the indicator stopable
-        self.update.setDaemon(True)
-        self.update.start()
+prices = get_prices()
 
-    def open_file(self, *args):
-        # index = self.menu.get_children().index(self.menu.get_active())
-        # selection = self.menu_items2[index]
-        # subprocess.Popen(["xdg-open", os.path.abspath("config.ini")])
-        # os.system('xdg-open config.ini')
-        print("X")
-        subprocess.call(['xdg-open', os.path.abspath("config.ini")])
+def get_init_price(prices, val, base):
+    return str(prices['DISPLAY'][val][base]['PRICE'])  + " (" + val + "/" + base + ")"
 
+main_symbol = str(prices['DISPLAY'][str((list(prices['DISPLAY'].keys())[0]))][base_value]['PRICE'])
+main_symbol = ''.join(i for i in main_symbol if not i.isdigit()).replace(".","").replace(",","").strip()
 
+separator = " " + (config.get('INDICATOR_LABELS', 'SEPARATOR_SYMBOL')).replace("\"","").replace("'","")+ " "
+initial_display_string = ''
 
-    def create_menu(self):
-        self.menu = Gtk.Menu()
-        # menu item 1
-        create_a_header("Coin",  "     24hr +/- %", "   Price ("+base_value+")", display_holdings, self.menu)
-
-        holdings_val = make_menus(get_prices(),display_holdings, coins_to_show, holding_coins, holding_vals,silent_holding_coins, silent_holding_vals, self.menu, self)
-
-        holdings = " $" + ("%.4f" % (sum(holdings_val)))
-
-
-        # menu_item = Gtk.MenuItem.new_with_label("Total Holdings: " + holdings)
-        menu_item = Gtk.MenuItem.new_with_label("Total Holdings: " + holdings)
-        # menu_item.set_always_show_image(True)
-
-        self.menu.append(Gtk.SeparatorMenuItem())          
-        self.menu.append(menu_item)
-        # "$" + ("%.4f" % d)
-        import sys
-        # sys.stdout("d")
-
-        self.configure_app = Gtk.MenuItem.new_with_label("Configure")
-        self.configure_app.set_label("Configure set label")
-
-        sub = Gtk.MenuItem('config.ini')
-        sub.connect('event', self.open_file)        
-        self.menu.append(sub)
-        # sub.connect('activate', open_config)
-
-
-        # configure_app = Gtk.MenuItem.set_label("Configure",self.app)
-        # menu_item.set_always_show_image(True)
-
-        # configure_app.set_text("X")
-        
-        
-        self.menu.append(Gtk.SeparatorMenuItem())          
-        self.menu.append(self.configure_app)
-        
-        # label.set_max_width_chars(3)
-        # row.add(label)
-
-        # IMAGE
-        # menu.append(Gtk.MenuItem("ETHX --- $101.2 ---  $2635.4 --- 12 --- $265.4"))
-        self.menu.append(Gtk.SeparatorMenuItem())  
-
-        # item_about.connect('activate', self.about)
-        # separator
-        self.menu.append(Gtk.SeparatorMenuItem())
-        # quit
-        item_quit = Gtk.MenuItem('Quit')
-        item_quit.connect('activate', self.stop)
-        self.menu.append(item_quit)
-
-        self.menu.show_all()
-        return self.menu
-
-    def update_indicator(self):
-        a= 1
-        while True:
-            time.sleep(int(config.get('INDICATOR_OPTIONS', 'REFRESH_TIME_IN_SECONDS')))
-
-
-            new_prices = get_prices()
-            new_label = "$"+get_init_price(new_prices)+"/ETH"
-            GObject.idle_add(
-                self.indicator.set_label, new_label, self.app,
-               priority=GObject.PRIORITY_DEFAULT
-                )
-
-
-            # UPDATE GOES HERE
-            # label = "Configure set:" + str(randint(0, 1000))
-
-            GObject.idle_add(self.configure_app.set_label, new_label)
-
-
-
-            # GObject.idle_add(
-            #     self.configure_app.set_label,
-            #     "Configure updated label", self.app,
-            #    priority=GObject.PRIORITY_DEFAULT
-            #     )
-
-    def stop(self, source):
-        Gtk.main_quit()
+each_label = []
+for label in json.loads(config.get('INDICATOR_LABELS', 'PAIRS')):
+    each_label.append(get_init_price(prices,label[0],label[1]))
+initial_display_string =  separator.join(each_label) 
 
 def process_coin_change(coin_change):
     coin_change *= 10 ** (2 + 2)
@@ -201,14 +94,136 @@ def process_coin_change(coin_change):
 
 # TODO: Add Holdings according to base price
 def calculate_coin_holding(raw_price,number_of_coins):
-    # total_holdings = total_holdings + (float(raw_price) * float(number_of_coins))
-    # total_holdings += (float(raw_price) * float(number_of_coins))
-    # return str((float(raw_price) * float(number_of_coins)))
-    d =  float((float(raw_price) * float(number_of_coins)))
-    return d
-    # return "$" + ("%.4f" % d)
+    return float(raw_price) * float(number_of_coins)
+    
+def column_normalizer(string):
+    width = 25
+    return (string + ' ' * (width - len(string)))
+
+class Indicator():
+    def __init__(self):
+        self.app = 'crypto-indicator'
+        iconpath = os.path.abspath("indicator-icon.svg")
+        self.indicator = AppIndicator3.Indicator.new(
+            self.app, iconpath,
+            AppIndicator3.IndicatorCategory.OTHER)
+        self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
+        self.sub_menus = self.create_menu()
+        self.indicator.set_menu(self.sub_menus)
+        # the thread:
+        self.update = Thread(target=self.update_indicator)
+        
+        # daemonize the thread to make the indicator stopable
+        self.update.setDaemon(True)
+        self.update.start()
+
+    def open_file(self, *args):
+        webbrowser.open('https://www.github.com/ankitgyawali', new=2)    
+        subprocess.call(["xdg-open", os.path.abspath("config.ini")])
+
+    def about(self, *args):
+        window = Gtk.Window()
+        window.set_border_width(20)
+        vert = Gtk.Orientation.VERTICAL
+        horz = Gtk.Orientation.HORIZONTAL
+        main_box = Gtk.Box(orientation=vert, spacing=5)
+        listbox = Gtk.ListBoxRow()
+        main_box.pack_start(listbox, True, True, 0)
+        label = Gtk.Label()
+        # label = Gtk.Label("This is an example of a line")
+        label.set_markup("Configure your coins on the following ini file with your favourite text editor. \n ~/.config/crypto-indicator-config.ini \n \n Instructions provided on the .ini file.\n More detailed instructions provided on <a href='https://www.github.com/ankitgyawali'>https://www.github.com/ankitgyawali</a>")
+        label.set_selectable(True)
+        main_box.add(label)
+        window.set_position(Gtk.WindowPosition.CENTER)
+        window.add(main_box)
+        # window.add(e)
+        # e.grab_focus()
+        window.show_all()
+        gtk.Window.present()
+
+    def create_menu(self):
+        self.menu = Gtk.Menu()
+        # menu item 1
+        create_a_header("Coin",  "     24hr +/- %", "   Price ("+base_value+")", display_holdings, self.menu)
+
+        holdings_val = make_menus(prices,display_holdings, coins_to_show, holding_coins, holding_vals,silent_holding_coins, silent_holding_vals, self.menu, self)
+        holdings = " $" + ("%.2f" % (sum(holdings_val)))
+        self.total_holdings_item = Gtk.MenuItem.new_with_label("Total Holdings: " + holdings)
+
+        ## Update label 
+        holdings_label = ''
+        if(display_holdings_label):
+            holdings_label = " " + separator + "Holdings: " + holdings
+
+        self.indicator.set_label(initial_display_string + holdings_label, self.app)
+        
+        self.menu.append(Gtk.SeparatorMenuItem())          
+        self.menu.append(self.total_holdings_item)
+        self.menu.append(Gtk.SeparatorMenuItem())          
+
+        about = Gtk.MenuItem('Configure')
+        self.menu.append(about)
+        about.connect('activate', self.about)
+        
+        config_indicator = Gtk.MenuItem('About')
+        self.menu.append(config_indicator)
+        # config_indicator.connect('activate', self.open_file)
+        config_indicator.connect("activate", self.open_file)        
+
+        # quit
+        item_quit = Gtk.MenuItem('Quit')
+        item_quit.connect('activate', self.stop)
+        self.menu.append(item_quit)
+        # self.indicator.set_label("AA",self.app)
+        self.menu.show_all()
+        return self.menu
+
+    def update_indicator(self):
+        a= 1
+        while True:
+            
+            time.sleep(int(config.get('INDICATOR_OPTIONS', 'REFRESH_TIME_IN_SECONDS')))
+
+            separator = " " + (config.get('INDICATOR_LABELS', 'SEPARATOR_SYMBOL')).replace("\"","").replace("'","")+ " "
+            initial_display_string = ''
+
+            each_label = []
+            prices = get_prices()            
+            for label in json.loads(config.get('INDICATOR_LABELS', 'PAIRS')):
+                each_label.append(get_init_price(prices,label[0],label[1]))
+            initial_display_string =  separator.join(each_label)
+
+            all_holdings = []
+            for silent_coin in silent_holding_coins:
+                all_holdings.append(calculate_coin_holding(prices['RAW'][silent_coin][base_value]['PRICE'], silent_holding_vals[silent_holding_coins.index(silent_coin)].replace(",","")))
+
+            ###########
+            for idx, coin in enumerate(self.coin_names):
+                coin_symbol = str(prices['RAW'][coin][base_value]['FROMSYMBOL'])
+                coin_price = prices['DISPLAY'][coin][base_value]['PRICE']
+                coin_change = process_coin_change((prices['RAW'][coin][base_value]['PRICE'] - prices['RAW'][coin][base_value]['OPEN24HOUR'])/prices['RAW'][coin][base_value]['PRICE'])
+                coin_change+= ' ' * (21 - len(coin_change))
+                menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price)
+                if (display_holdings and (coin in holding_coins)): # This condition checks for holdings that are also shown
+                    all_holdings.append(calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
+                    menu_string += "$" + ("%.4f" % calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
+                GObject.idle_add(self.coin_menu_rows[idx].set_label, str(menu_string))
+
+            holdings = " $" + ("%.2f" % (sum(all_holdings)))
+            GObject.idle_add(self.total_holdings_item.set_label, "Total Holdings: " + holdings)
+
+            holdings_label = ''
+            if(display_holdings_label):
+                holdings_label = " " + separator + "Holdings: " + holdings
+
+            GObject.idle_add(self.indicator.set_label, initial_display_string + holdings_label, self.app, priority=GObject.PRIORITY_DEFAULT)
+
+    def stop(self, source):
+        Gtk.main_quit()
 
 def make_menus(prices, display_holdings, coins_to_show, holding_coins, holding_vals, silent_holding_coins, silent_holding_vals, menu, self):
+    self.coin_menu_rows = []
+    self.coin_names = []
     all_holdings = []
     # Calculate silent holding prices
     for silent_coin in silent_holding_coins:
@@ -222,16 +237,14 @@ def make_menus(prices, display_holdings, coins_to_show, holding_coins, holding_v
         if (display_holdings and (coin in holding_coins)): # This condition checks for holdings that are also shown
             all_holdings.append(calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
             menu_string += "$" + ("%.4f" % calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
-        
-        
+        self.coin_names.append(coin)
         # MENU LABEL
-        menu_item = Gtk.ImageMenuItem.new_with_label(menu_string)
-        
-        menu_item.set_always_show_image(True)
-        menu.append(menu_item)
-        menu_item.set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".png")))
+        self.coin_menu_rows.append(Gtk.ImageMenuItem.new_with_label(menu_string))
+        self.coin_menu_rows[-1].set_always_show_image(True)
+        self.coin_menu_rows[-1].set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".png")))
+        menu.append(self.coin_menu_rows[-1])
+        # menu.append(menu_item)
     return all_holdings
-
 
 def create_a_header(col1, col2, col3, display_holdings, menu):
     if (display_holdings):
@@ -239,22 +252,10 @@ def create_a_header(col1, col2, col3, display_holdings, menu):
     else:
         menu_string = column_normalizer(col1) + column_normalizer(col2) + column_normalizer(col3)
     menu.append(Gtk.MenuItem(menu_string))
-    # menu.append(Gtk.MenuItem("ETHX --- $101.2 ---  $2635.4 --- 12 --- $265.4"))
     menu.append(Gtk.SeparatorMenuItem())  
 
-def column_normalizer(string):
-    width = 25
-    return (string + ' ' * (width - len(string)))
-
-def get_init_price(prices):
-    return str(prices['RAW']['ETH'][base_value]['PRICE'])
-
-def get_prices():
-    request = urllib.request.Request(url)
-    response = urllib.request.urlopen(request)
-    dump = json.loads(response.read().decode('utf-8'))
-    eth = dump['RAW']['ETH'][base_value]['PRICE']
-    return dump
+## Try opening on init
+subprocess.Popen(["xdg-open", os.path.abspath("config.ini")])
 
 Indicator()
 # this is where we call GObject.threads_init()
