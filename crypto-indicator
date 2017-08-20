@@ -1,5 +1,9 @@
+#!/usr/bin/python3
+
 # Local modules
-import signal, gi, os, json, webbrowser, time, subprocess, configparser
+import signal, gi, os, json, webbrowser, time, subprocess, configparser, json, sys
+import urllib.request
+from math import floor
 
 # Gtk & Threading
 gi.require_version('Gtk', '3.0')
@@ -7,14 +11,59 @@ gi.require_version('AppIndicator3', '0.1')
 from gi.repository import Gtk, AppIndicator3, GObject, Pango
 from threading import Thread
 
-# Local helper module
-import helpers
-
+# Prepare default paths for indicator intialization
+indicator_icon_path = '/usr/share/crypto-indicator/indicator-icon.svg' if os.path.isfile('/usr/share/crypto-indicator/indicator-icon.svg') else os.path.abspath("indicator-icon.svg")
+config_file_path = '/usr/share/crypto-indicator/config.ini' if os.path.isfile('/usr/share/crypto-indicator/config.ini') else os.path.abspath("config.ini")
 
 
 # Preprocessing from config.ini before gtk is initialized
 config = configparser.ConfigParser()
-config.readfp(open(r'config.ini'))
+config.readfp(open(config_file_path))
+
+# if(not (config.get('INDICATOR_OPTIONS', 'RUN_ON_BOOT') == '1')):
+#     sys.exit(0)
+
+# Converts list to a set and back to list while preserving order
+def list_to_set_preserve_order(seq):
+    seen = set()
+    seen_add = seen.add
+    return [x for x in seq if not (x in seen or seen_add(x))]
+
+# Makes main call to crypto compare api
+def get_prices(url):
+    return json.loads(urllib.request.urlopen(urllib.request.Request(url)).read().decode('utf-8'))
+
+# Returns a single Indicator Label in format- $ Price (VAL/BASE)
+def get_init_price(prices, val, base):
+    return str(prices['DISPLAY'][val][base]['PRICE'])  + " (" + val + "/" + base + ")"
+
+# Beautifies % changed to a readable format
+def process_coin_change(coin_change):
+    coin_change *= 10 ** (2 + 2)
+    return_val = '{1:.{0}f}%'.format(2, floor(coin_change) / 10 ** 2)
+    if (coin_change>0):
+        return "+ "  +return_val
+    else:
+        return return_val.replace("-", "- ")
+
+# Returns value of coins held
+# TODO: Use Base val
+def calculate_coin_holding(raw_price,number_of_coins):
+    return float(raw_price) * float(number_of_coins)
+
+# Control width of column in case monospace font is used
+def column_normalizer(string):
+    width = 25
+    return (string + ' ' * (width - len(string)))
+
+# Return the main header String 
+def create_a_header(col1, col2, col3, display_holdings):
+    if (display_holdings):
+        return column_normalizer(col1) + column_normalizer(col2) + column_normalizer(col3) + column_normalizer("HOLDINGS")
+    else:
+        return column_normalizer(col1) + column_normalizer(col2) + column_normalizer(col3)
+
+
 
 # Read initial coins
 coins = json.loads(config.get('INDICATOR_OPTIONS', 'COINS_TO_SHOW'))
@@ -61,9 +110,9 @@ for silent_holdings_pair in config.items('SILENT_HOLDINGS'):
 
 
 # Lists -> Set -> List while preserving order // Out final data stores
-primary_coins = helpers.list_to_set_preserve_order(primary_coins)
-base_coins = helpers.list_to_set_preserve_order(base_coins)
-coins_to_show = helpers.list_to_set_preserve_order(coins_to_show)
+primary_coins = list_to_set_preserve_order(primary_coins)
+base_coins = list_to_set_preserve_order(base_coins)
+coins_to_show = list_to_set_preserve_order(coins_to_show)
 base_value = config.get('INDICATOR_OPTIONS', 'COINS_BASE_VALUE').replace("\"","").replace("'","")
 display_indicator = [['ETH', 'USD'], ['ETH','BTC']]
 
@@ -71,30 +120,31 @@ display_indicator = [['ETH', 'USD'], ['ETH','BTC']]
 url = "https://min-api.cryptocompare.com/data/pricemultifull?fsyms=" + ",".join(primary_coins) + "&tsyms=" +  ",".join(base_coins) + "," + base_value
 
 # Send HTTP request to cryptocompare API for first time for initialization
-prices = helpers.get_prices(url)
+prices = get_prices(url)
 
 # Grab main 'symbol'
 # TODO: Add base conversions according to main_symbol instead of binding it to usd 
 main_symbol = str(prices['DISPLAY'][str((list(prices['DISPLAY'].keys())[0]))][base_value]['PRICE'])
-main_symbol = ''.join(i for i in main_symbol if not i.isdigit()).replace(".","").replace(",","").strip()
+main_symbol = ''.join(i for i in main_symbol if not i.isdigit()).replace(".","").replace(",","").strip() + " "
+# main_symbol = "$ " if(main_symbol == "AUD") else (main_symbol+ " ") 
 
 # Get separator from config.ini, some people might have different ideas
 separator = " " + (config.get('INDICATOR_LABELS', 'SEPARATOR_SYMBOL')).replace("\"","").replace("'","")+ " "
 # This will hold main crypto-indicator label
 initial_display_string = ''
 
+
 # Construct Label
 each_label = []
 for label in json.loads(config.get('INDICATOR_LABELS', 'PAIRS')):
-    each_label.append(helpers.get_init_price(prices,label[0],label[1]))
+    each_label.append(get_init_price(prices,label[0],label[1]))
 initial_display_string =  separator.join(each_label) 
 
 # Begin Main Indicator Class
 class Indicator():
     def __init__(self):
         self.app = 'crypto-indicator'
-        iconpath = os.path.abspath("indicator-icon.svg")
-        self.indicator = AppIndicator3.Indicator.new(self.app, iconpath, AppIndicator3.IndicatorCategory.OTHER)
+        self.indicator = AppIndicator3.Indicator.new(self.app, indicator_icon_path, AppIndicator3.IndicatorCategory.OTHER)
         self.indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
         self.sub_menus = self.create_menu()
         self.indicator.set_menu(self.sub_menus)
@@ -111,7 +161,10 @@ class Indicator():
     # Action Event for 'Configure' Option
     # TODO: xdg-open config.ini does not work for some reason, so we display users a link to config.ini instead
     def configure_window(self, *args):
-        subprocess.call(["xdg-open", os.path.abspath("config.ini")]) # Doesn't work for some reason, threading issues?
+        subprocess.call(["xdg-open", config_file_path]) # Doesn't work for some reason, threading issues?
+ 
+    
+    def help_window(self, *args):
         # Construct window
         window = Gtk.Window()
         window.set_border_width(20)
@@ -121,14 +174,14 @@ class Indicator():
         listbox = Gtk.ListBoxRow()
         main_box.pack_start(listbox, True, True, 0)
         label = Gtk.Label()
-        label.set_markup("Configure your coins on the following ini file with your favourite text editor. \n ~/.config/crypto-indicator-config.ini \n \n Instructions provided on the .ini file.\n More detailed instructions provided on <a href='https://www.github.com/ankitgyawali'>https://www.github.com/ankitgyawali</a>")
+        label.set_markup("Configure your coins on the following ini file with your favourite text editor. \n /usr/share/crypto-indicator/config.ini \n \n Instructions provided on the .ini file.\n More detailed instructions provided on <a href='https://www.github.com/ankitgyawali/crypto-indicator#configuration'>https://www.github.com/ankitgyawali/crypto-indicator#configuration</a>")
         label.set_selectable(True)
         main_box.add(label)
         window.set_position(Gtk.WindowPosition.CENTER)
         window.add(main_box)
         window.show_all()
         # Focus window when clicked
-        gtk.Window.present()
+        Gtk.Window.present()
 
     def stop(self, source):
         Gtk.main_quit()
@@ -137,7 +190,7 @@ class Indicator():
     def create_menu(self):
         self.menu = Gtk.Menu()
         # Create Menu header
-        self.menu.append(Gtk.MenuItem(helpers.create_a_header("Coin",  "     24hr +/- %", "   Price ("+base_value+")", display_holdings)))
+        self.menu.append(Gtk.MenuItem(create_a_header("Coin",  "     24hr +/- %", "   Price ("+base_value+")", display_holdings)))
         self.menu.append(Gtk.SeparatorMenuItem())
 
         # Get data used to populate menu rows for each coins using preprocessed data from earlier
@@ -145,28 +198,38 @@ class Indicator():
         holdings_val, old_holdings_val = make_menus(prices,display_holdings, coins_to_show, holding_coins, holding_vals,silent_holding_coins, silent_holding_vals, self.menu, self)
         
         # Calculate % difference 24 hours for total holdings & prettify before displaying
-        diff = helpers.process_coin_change((sum(holdings_val) - sum(old_holdings_val)) / sum(old_holdings_val))
-        holdings = " $" + ("%.2f" % (sum(holdings_val)))
-        self.total_holdings_item = Gtk.MenuItem.new_with_label("Total Holdings: " + holdings + " ("+ diff + ")")
+        if(display_holdings):
+            diff = process_coin_change((sum(holdings_val) - sum(old_holdings_val)) / sum(old_holdings_val))
+            holdings = " "+ main_symbol + ("%.2f" % (sum(holdings_val)))
+            self.total_holdings_item = Gtk.MenuItem.new_with_label("Total Holdings: " + holdings + " ("+ diff + ")")
 
+            # After all the coins have been appended from make_menu function display total holdings
+            self.menu.append(self.total_holdings_item)
+            self.menu.append(Gtk.SeparatorMenuItem())    
+        
         ## Update label 
         holdings_label = ''
-        if(display_holdings_label):
+        if(display_holdings and display_holdings_label):
             holdings_label = " " + separator + "Holdings: " + holdings
 
         # Main indicator label Set here
         self.indicator.set_label(initial_display_string + holdings_label, self.app)
         self.menu.append(Gtk.SeparatorMenuItem())
 
-        # After all the coins have been appended from make_menu function display total holdings
-        self.menu.append(self.total_holdings_item)
-        self.menu.append(Gtk.SeparatorMenuItem())          
+      
 
         # Add configure menu option & callback to function defined earlier
         about = Gtk.MenuItem('Configure')
         self.menu.append(about)
         about.connect('activate', self.configure_window)
-        
+
+
+        # Help
+        help = Gtk.MenuItem('Help')
+        self.menu.append(help)
+        help.connect('activate', self.help_window)        
+
+
         # Add About menu option & callback to function defined earlier        
         config_indicator = Gtk.MenuItem('About')
         self.menu.append(config_indicator)
@@ -194,34 +257,34 @@ class Indicator():
             each_label = []
 
             # HTTP call to cyrptocompare API
-            prices = helpers.get_prices(url)            
+            prices = get_prices(url)            
             
             for label in json.loads(config.get('INDICATOR_LABELS', 'PAIRS')):
-                each_label.append(helpers.get_init_price(prices,label[0],label[1]))
+                each_label.append(get_init_price(prices,label[0],label[1]))
             initial_display_string =  separator.join(each_label)
 
             # Create & update each menu row label string
             all_holdings = []
             old_holdings_val = []
             for silent_coin in silent_holding_coins:
-                all_holdings.append(helpers.calculate_coin_holding(prices['RAW'][silent_coin][base_value]['PRICE'], silent_holding_vals[silent_holding_coins.index(silent_coin)].replace(",","")))
+                all_holdings.append(calculate_coin_holding(prices['RAW'][silent_coin][base_value]['PRICE'], silent_holding_vals[silent_holding_coins.index(silent_coin)].replace(",","")))
 
             # We are looping through self.coin_name/self.coin_menu_rows constructed at make_menus defined below during initialization, which contain all menu row objects
             for idx, coin in enumerate(self.coin_names):
                 coin_symbol = str(prices['RAW'][coin][base_value]['FROMSYMBOL'])
                 coin_price = prices['DISPLAY'][coin][base_value]['PRICE']
-                coin_change = helpers.process_coin_change((prices['RAW'][coin][base_value]['PRICE'] - prices['RAW'][coin][base_value]['OPEN24HOUR'])/prices['RAW'][coin][base_value]['PRICE'])
+                coin_change = process_coin_change((prices['RAW'][coin][base_value]['PRICE'] - prices['RAW'][coin][base_value]['OPEN24HOUR'])/prices['RAW'][coin][base_value]['PRICE'])
                 coin_change+= ' ' * (21 - len(coin_change))
-                menu_string = helpers.column_normalizer(coin_symbol) + helpers.column_normalizer(coin_change) + helpers.column_normalizer(coin_price)
+                menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price)
                 if (display_holdings and (coin in holding_coins)): # This condition checks for holdings that are also shown
-                    all_holdings.append(helpers.calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
-                    old_holdings_val.append(helpers.calculate_coin_holding(prices['RAW'][coin][base_value]['OPEN24HOUR'], holding_vals[holding_coins.index(coin)].replace(",","")))
-                    menu_string += "$" + ("%.4f" % helpers.calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
+                    all_holdings.append(calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
+                    old_holdings_val.append(calculate_coin_holding(prices['RAW'][coin][base_value]['OPEN24HOUR'], holding_vals[holding_coins.index(coin)].replace(",","")))
+                    menu_string += main_symbol + ("%.4f" % calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
                 # Finally update menu label for each coin
                 GObject.idle_add(self.coin_menu_rows[idx].set_label, str(menu_string))
             # Update total holdings menu row
-            holdings = " $" + ("%.2f" % (sum(all_holdings)))
-            diff = helpers.process_coin_change((sum(all_holdings) - sum(old_holdings_val)) / sum(old_holdings_val))            
+            holdings = " "+ main_symbol + ("%.2f" % (sum(all_holdings)))
+            diff = process_coin_change((sum(all_holdings) - sum(old_holdings_val)) / sum(old_holdings_val))            
             GObject.idle_add(self.total_holdings_item.set_label, "Total Holdings: " + holdings + " ("+ diff + ")")
 
             # Update indicator label with new data
@@ -240,23 +303,27 @@ def make_menus(prices, display_holdings, coins_to_show, holding_coins, holding_v
     old_holdings_value = []
     # Calculate silent holding prices & add it to all_holdings list without display the coin as menu
     for silent_coin in silent_holding_coins:
-        all_holdings.append(helpers.calculate_coin_holding(prices['RAW'][silent_coin][base_value]['PRICE'], silent_holding_vals[silent_holding_coins.index(silent_coin)].replace(",","")))
+        all_holdings.append(calculate_coin_holding(prices['RAW'][silent_coin][base_value]['PRICE'], silent_holding_vals[silent_holding_coins.index(silent_coin)].replace(",","")))
     # Create labels & show menu row for each coins
     for coin in coins_to_show:
         coin_symbol = str(prices['RAW'][coin][base_value]['FROMSYMBOL'])
         coin_price = prices['DISPLAY'][coin][base_value]['PRICE']
-        coin_change = helpers.process_coin_change((prices['RAW'][coin][base_value]['PRICE'] - prices['RAW'][coin][base_value]['OPEN24HOUR'])/prices['RAW'][coin][base_value]['PRICE'])
+        coin_change = process_coin_change((prices['RAW'][coin][base_value]['PRICE'] - prices['RAW'][coin][base_value]['OPEN24HOUR'])/prices['RAW'][coin][base_value]['PRICE'])
         coin_change+= ' ' * (21 - len(coin_change))
-        menu_string = helpers.column_normalizer(coin_symbol) + helpers.column_normalizer(coin_change) + helpers.column_normalizer(coin_price)
+        menu_string = column_normalizer(coin_symbol) + column_normalizer(coin_change) + column_normalizer(coin_price)
         if (display_holdings and (coin in holding_coins)): # This condition checks for holdings that are also shown
-            all_holdings.append(helpers.calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
-            old_holdings_value.append(helpers.calculate_coin_holding(prices['RAW'][coin][base_value]['OPEN24HOUR'], holding_vals[holding_coins.index(coin)].replace(",","")))
-            menu_string += "$" + ("%.4f" % helpers.calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
+            all_holdings.append(calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
+            old_holdings_value.append(calculate_coin_holding(prices['RAW'][coin][base_value]['OPEN24HOUR'], holding_vals[holding_coins.index(coin)].replace(",","")))
+            menu_string += main_symbol + ("%.4f" % calculate_coin_holding(prices['RAW'][coin][base_value]['PRICE'], holding_vals[holding_coins.index(coin)].replace(",","")))
         self.coin_names.append(coin)
         # Append coin id's & GTK.ImageMenuItem object so it can be updated easily later on
         self.coin_menu_rows.append(Gtk.ImageMenuItem.new_with_label(menu_string))
         self.coin_menu_rows[-1].set_always_show_image(True)
-        self.coin_menu_rows[-1].set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".png")))
+        if(os.path.isdir("/usr/share/crypto-indicator/icons")):
+            self.coin_menu_rows[-1].set_image(Gtk.Image.new_from_file("/usr/share/crypto-indicator/icons/"+ coin_symbol +".png"))
+        else:
+            self.coin_menu_rows[-1].set_image(Gtk.Image.new_from_file(os.path.abspath("icons/"+ coin_symbol +".png")))
+        
         menu.append(self.coin_menu_rows[-1])
     # Return total holdings value now & holdings value 24 hrs earlier to display % change
     return all_holdings, old_holdings_value

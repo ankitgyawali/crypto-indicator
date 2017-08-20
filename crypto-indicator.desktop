@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Name=crypto-indicator
+Comment=Indicator for tracking cyrpto portfolio
+Exec=crypto-indicator
+Type=Application
+Icon=/usr/share/crypto-indicator/indicator-icon.svg
+Terminal=false
+X-GNOME-Autostart-enabled=true
+Comment=Startup Script

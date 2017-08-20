@@ -1,8 +1,8 @@
 {
   "apps" : [
       {
-    "name"        : "indicator",
-    "script"      : "./main.py",
+    "name"        : "crypto-indicator-dev-mode",
+    "script"      : "crypto-indicator",
     "interpereter": "python",
     "watch"       : true
 }

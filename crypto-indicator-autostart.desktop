@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Exec=crypto-indicator
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name[en_US]=crypto-indicator-autostart
+Name=crypto-indicator-autostart
+Comment[en_US]=crypto-indicator-autostart
+Comment=crypto-indicator-autostart
