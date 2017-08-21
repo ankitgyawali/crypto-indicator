@@ -28,7 +28,7 @@ The default configuration file, [config.ini](https://github.com/ankitgyawali/cry
 
 Crypto-indicator will have to be manually restarted once you modify `config.ini`. This can be done by Quitting the indicator from its Menu options and running `crypto-indicator-background` on terminal.
 
-`config.ini` will contain detailed explanation of what each values are used for. Some relevant configuration options are described in greated detail below:
+`config.ini` will contain detailed explanation of what each values are used for. Some relevant configuration options are described in greater detail below:
 
 Within `INDICATOR_OPTIONS`:
 
