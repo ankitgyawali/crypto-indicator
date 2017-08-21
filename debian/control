@@ -1,0 +1,8 @@
+Package: crypto-indciator
+Version: 1.0.0
+Maintainer: Ankit Gyawali <dev@ankitgyawali.com>
+Architecture: all
+Priority: optional
+Depends: python (>=2.7), gir1.2-appindicator3-0.1
+Description: Crypto indicator for tracking your crypto portfolio & monitoring crypto prices.
+ Go to https://github.com/ankitgyawali/crypto-indicator for detailed documentation.

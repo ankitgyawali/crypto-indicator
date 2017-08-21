@@ -284,12 +284,13 @@ class Indicator():
                 GObject.idle_add(self.coin_menu_rows[idx].set_label, str(menu_string))
             # Update total holdings menu row
             holdings = " "+ main_symbol + ("%.2f" % (sum(all_holdings)))
-            diff = process_coin_change((sum(all_holdings) - sum(old_holdings_val)) / sum(old_holdings_val))            
-            GObject.idle_add(self.total_holdings_item.set_label, "Total Holdings: " + holdings + " ("+ diff + ")")
+            if(display_holdings):
+                diff = process_coin_change((sum(all_holdings) - sum(old_holdings_val)) / sum(old_holdings_val))            
+                GObject.idle_add(self.total_holdings_item.set_label, "Total Holdings: " + holdings + " ("+ diff + ")")
 
             # Update indicator label with new data
             holdings_label = ''
-            if(display_holdings_label):
+            if(display_holdings_label and display_holdings):
                 holdings_label = " " + separator + "Holdings: " + holdings
 
             GObject.idle_add(self.indicator.set_label, initial_display_string + holdings_label, self.app, priority=GObject.PRIORITY_DEFAULT)
