@@ -6,7 +6,7 @@ import requests
 import shutil
 
 # Time to sleep to avoid rate limit error
-rate_limit_time = 12
+rate_limit_time = 3
 
 
 # Local folder Structures

@@ -1,4 +1,4 @@
 __pycache__
-config.ini
+!config.ini
 icons/*.png~
 icons/*.png~*
