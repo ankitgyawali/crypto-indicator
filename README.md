@@ -1,6 +1,6 @@
 # crypto-indicator
 
-Cryptocurrency Indicator app for Ubuntu OS written in python with Gtk.
+Cryptocurrency Indicator app for linux written in python with Gtk.
 
 ## Installation
 
