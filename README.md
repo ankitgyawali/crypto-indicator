@@ -12,14 +12,14 @@ Refer to configuration section [below](https://github.com/ankitgyawali/crypto-in
 
 [Screenshots](https://github.com/ankitgyawali/crypto-indicator#screenshots) provided.
 
-If your newer coins are missing icons, run [scrape.py](https://github.com/ankitgyawali/crypto-indicator/blob/master/scrape.py), with `python /usr/share/crypto-indicator/icons` which will download new icons. You might need to run this as `sudo`.
+If your newer coins are missing icons, run [scrape.py](https://github.com/ankitgyawali/crypto-indicator/blob/master/scrape.py), with `python /usr/share/crypto-indicator/scrape.py` which will download new icons from cryptocompare api. You might need to run this as `sudo`.
 
 
 ### Dev Installation
 
-If you would like to run the indicator manually, you can also clone the repository and run `python crypto-indicator`. This picks up `config.ini` and icons from its current folder if it doesn't detect one on `/usr/share/crypto-indicator/config.ini`.
+If you would like to run the indicator manually, clone the repository and run `python crypto-indicator`. This picks up `config.ini` and icons from its current folder if it doesn't detect one on `/usr/share/crypto-indicator/config.ini`.
 
-Development was done using `pm2` process manager. If you already have nodejs installed and would like to mess around the code with livereload enabled, run `pm2 start crypto-indicator --interpreter=python --watch --name=crypto-indicator-dev-mode` from root of folder. [This](https://github.com/ankitgyawali/crypto-indicator/blob/master/crypto-indicator) is the main script. If you have nodejs installed but do not have `pm2` install it by running `npm install -g pm2`.
+Development was done using `pm2` process manager. If you already have nodejs installed and would like to mess around the code with livereload enabled, run `pm2 start crypto-indicator --interpreter=python --watch --name=crypto-indicator-dev-mode` from root of the project repo. [This](https://github.com/ankitgyawali/crypto-indicator/blob/master/crypto-indicator) is the main script. If you have nodejs installed but do not have `pm2` install it by running `npm install -g pm2`.
 
 
 ## Configuration
